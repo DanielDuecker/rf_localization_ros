@@ -12,6 +12,8 @@ class RF_ROS():
         self.__data_list = []
         self.__gantry_pos_m = np.array([0,0,0])
         self.__gantry_pos_reached = False
+        self.__stop_recording = False
+        self.__stop_recording_timer = 0
 
         rospy.init_node('RF_Loc', anonymous=True)
         self.__pos_sub = rospy.Subscriber("/gantry/current_position", gantry, self.get_update_pos_m)
@@ -54,7 +56,7 @@ class RF_ROS():
             measfile.write('data format = [meas_counter, time_elapsed, pos_x_mm, pos_y_mm, pos_z_mm], pxx_den_max\n')
             measfile.write('### begin data log\n')
 
-    def take_measurements_at_pos(self, current_pos, b_meas):
+    def take_measurements_at_pos(self, current_pos):
 
         # position m --> mm
         pos_x_mm = current_pos[0]*1000
@@ -62,20 +64,20 @@ class RF_ROS():
         pos_z_mm = current_pos[2]*1000
 
         # taking measurements
-        self.__pos_meas_counter =+ 1  # counts number of measurements at this position
+        self.__pos_meas_counter += 1  # counts number of measurements at this position
 
         time_elapsed = 0
 
         freq_den_max, pxx_den_max = self.__oRf.get_rss_peaks()
 
-        data_row = np.append([self.__pos_meas_counter, time_elapsed, pos_x_mm, pos_y_mm, pos_z_mm], pxx_den_max)
+        data_row = np.append([self.__pos_meas_counter, time_elapsed, round(pos_x_mm,0), round(pos_y_mm,0), round(pos_z_mm,0)], pxx_den_max)
         self.__data_list.append(data_row)
 
         return True
 
     def write_all_data_to_file(self):
 
-        with open(self.__measdata_filename, 'w') as measfile:
+        with open(self.__measdata_filename, 'a') as measfile:
             data_mat = np.asarray(self.__data_list)
             for row in data_mat:
                 row_string = ''
@@ -85,7 +87,7 @@ class RF_ROS():
                 measfile.write(row_string)
 
             measfile.close()
-
+        self.__data_list = []  # reset
         return True
 
     def get_update_pos_m(self, gantry_pos_m):
@@ -100,10 +102,36 @@ class RF_ROS():
     def get_gantry_pos_reached_status(self):
         return self.__gantry_pos_reached
 
+    def get_meas_counter(self):
+        return self.__pos_meas_counter
 
-def record_measurements():
-    while not rospy.is_shutdown():
-        oRf.take_measurements_at_pos(oRf.get_gantry_pos_m(), oRf.get_gantry_pos_reached_status())
+    def record_measurements(self, max_waiting_time):
+        timer_started = False
+        is_not_written = False
+        while not rospy.is_shutdown():
+
+            if oRf.get_gantry_pos_reached_status() and not timer_started:
+                start_timer = t.time()
+                timer_started = True
+
+            elif not oRf.get_gantry_pos_reached_status():
+                timer_started = False
+                start_timer = t.time()
+
+            if oRf.get_gantry_pos_reached_status():
+                oRf.take_measurements_at_pos(oRf.get_gantry_pos_m())
+                is_not_written = True
+
+            elif is_not_written and not oRf.get_gantry_pos_reached_status():
+                oRf.write_all_data_to_file()
+                is_not_written = False
+                print("wrote to file")
+
+            if (t.time()-start_timer) > max_waiting_time:
+                print("end of recording")
+                print("max waiting time of " + str(max_waiting_time) + "s  reached")
+                print("Number of recorded measurments: " + str(self.get_meas_counter()))
+                break
 
 
 if __name__ == '__main__':
@@ -111,7 +139,4 @@ if __name__ == '__main__':
     oRf = RF_ROS()
     oRf.start_RfEar()
     oRf.init_meas_file('measfile.txt')
-
-
-
-    oRf.write_all_data_to_file()
+    oRf.record_measurements(max_waiting_time=3)
