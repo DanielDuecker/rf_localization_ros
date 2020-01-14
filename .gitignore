@@ -1,0 +1,4 @@
+/venv
+*.pyc
+measfile.txt
+.idea
