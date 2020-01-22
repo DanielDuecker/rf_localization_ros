@@ -10,7 +10,7 @@ class RF_ROS():
         self.__measdata_filename = 'meas.txt'
         self.__pos_meas_counter = 0
         self.__data_list = []
-        self.__gantry_pos_m = np.array([0,0,0])
+        self.__gantry_pos_m = np.array([0, 0, 0])
         self.__gantry_pos_reached = False
         self.__stop_recording = False
         self.__stop_recording_timer = 0
@@ -20,9 +20,9 @@ class RF_ROS():
 
     def start_RfEar(self, center_freq=434.2e6, freqspan=1e5):
         import rf
-        self.__oRf = rf.RfEar(sdr_type='NooElec',center_freq=center_freq, freqspan=freqspan)
+        self.__oRf = rf.RfEar(sdr_type='NooElec', center_freq=center_freq, freqspan=freqspan)
 
-        freq6tx = [434.00e6, 434.1e6, 434.30e6, 434.45e6, 434.65e6, 433.90e6]
+        freq6tx = [434.82e6, 434.17e6, 434.02e6, 434.62e6, 434.32e6]
         """
         tx_6pos = [[700, 440],
            [1560,450],
@@ -32,14 +32,15 @@ class RF_ROS():
            [700, 1230]]
         """
 
-        tx_6pos = np.array([[520, 430,0],
-                   [1540, 430, 0],
-                   [2570, 430, 0],
-                   [2570, 1230, 0],
-                   [1540, 1230, 0],
-                   [530, 1230, 0]])
+        tx_6pos = np.array([[2359, 1349, 641],
+                            [2110, 1349, 641],
+                            [1861, 1349, 641],
+                            [1612, 1349, 641],
+                            [1363, 1349, 641]])
 
         self.__oRf.set_txparams(freq6tx, tx_6pos)
+
+        # self.__oRf.plot_txrss_live()
 
         return True
 
@@ -59,9 +60,9 @@ class RF_ROS():
     def take_measurements_at_pos(self, current_pos):
 
         # position m --> mm
-        pos_x_mm = current_pos[0]*1000
-        pos_y_mm = current_pos[1]*1000
-        pos_z_mm = current_pos[2]*1000
+        pos_x_mm = current_pos[0] * 1000
+        pos_y_mm = current_pos[1] * 1000
+        pos_z_mm = current_pos[2] * 1000
 
         # taking measurements
         self.__pos_meas_counter += 1  # counts number of measurements at this position
@@ -70,7 +71,9 @@ class RF_ROS():
 
         freq_den_max, pxx_den_max = self.__oRf.get_rss_peaks()
 
-        data_row = np.append([self.__pos_meas_counter, time_elapsed, round(pos_x_mm,0), round(pos_y_mm,0), round(pos_z_mm,0)], pxx_den_max)
+        data_row = np.append(
+            [self.__pos_meas_counter, time_elapsed, round(pos_x_mm, 0), round(pos_y_mm, 0), round(pos_z_mm, 0)],
+            pxx_den_max)
         self.__data_list.append(data_row)
 
         return True
@@ -127,7 +130,7 @@ class RF_ROS():
                 is_not_written = False
                 print("wrote to file")
 
-            if (t.time()-start_timer) > max_waiting_time:
+            if (t.time() - start_timer) > max_waiting_time:
                 print("end of recording")
                 print("max waiting time of " + str(max_waiting_time) + "s  reached")
                 print("Number of recorded measurments: " + str(self.get_meas_counter()))
